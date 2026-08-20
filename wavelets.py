@@ -73,9 +73,19 @@ class WaveletBandPower(BaseEstimator, TransformerMixin):
         self.log = log
 
     def fit(self, X: np.ndarray, y: np.ndarray = None):
-        # Stateless -- nothing is learned from training data (unlike CSP's
-        # spatial filters), but sklearn's Pipeline API expects a fit().
+        # We need the frequencies that are gonna be computed for the scales for the wavelet transform
         self._freqs = np.asarray(self.freqs) if self.freqs is not None else DEFAULT_FREQS
+        # the walets is the mother wavelet (a fixed shape, for example like our Morlet wavelet).
+        # When you change the scale, you stretch or compress that same shape.
+        # A stretched wavelet (large scale) oscillates more slowly → it matches low frequencies.
+        # A compressed wavelet (small scale) oscillates faster → it matches high frequencies.
+        # The wavelet is stretched/compressed according to the scale.
+        # Scale is inversely proportional to frequency:
+        #   large scale  → low frequency
+        #   small scale  → high frequency
+        # this self._freqs / self.sfreq is because Computers do not know what a "second" is,
+        # so we divide by sfreq to normalize the frequency to cycles per sample.
+        # Target Frequency / Sampling Rate = cycles/second ÷ samples/second = cycles/sample
         self._scales = pywt.frequency2scale(self.wavelet, self._freqs / self.sfreq)
         return self
 
@@ -87,19 +97,27 @@ class WaveletBandPower(BaseEstimator, TransformerMixin):
         if X.ndim != 3:
             raise ValueError("Expected X with shape (n_epochs, n_channels, n_times).")
         n_epochs, n_channels, n_times = X.shape
+        # len(self._freqs) shape = 12
         features = np.empty((n_epochs, n_channels, len(self._freqs)))
 
         for i, epoch in enumerate(X):
             for ch in range(n_channels):
+                # 1. CWT ANALYSIS
+                # - Wavelets are templates resized (scales) to match brain oscillations at each frequency.
+                # - sampling_period (1/sfreq): Tells PyWavelets real time between samples in seconds (e.g., 1/160 = 0.00625s).
+                # - coeffs: 2D complex matrix (shape: freqs x time) holding phase & magnitude vectors (a + bi).
                 coeffs, _ = pywt.cwt(epoch[ch], self._scales, self.wavelet, sampling_period=1.0 / self.sfreq)
-                
+                # 2. ENERGY / POWER EXTRACTION
+                # - np.abs(coeffs): Uses Pythagorean theorem (sqrt(a² + b²)) to convert complex numbers into voltage amplitude.
+                # - ** 2: Squares amplitude to convert raw voltage into physical electrical power (variance).
+                # - np.mean(..., axis=1): Averages power across all time points to leave 1 feature value per frequency.
                 features[i, ch, :] = np.mean(np.abs(coeffs) ** 2, axis=1)  # avg power over time, per freq
 
         features = features.reshape(n_epochs, -1)  # (n_epochs, n_channels * n_freqs)
+        # making the data look like a bell curve so the LDA can draw a clean, accurate boundary line.
         if self.log:
             features = np.log(features + 1e-12)
         return features
 
     def fit_transform(self, X: np.ndarray, y: np.ndarray = None, **fit_params) -> np.ndarray:
         return self.fit(X, y).transform(X)
-	

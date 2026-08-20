@@ -72,7 +72,7 @@ def build_pipeline() -> Pipeline:
     """The pipeline required by V.1.2: our own CSP (BaseEstimator +
     TransformerMixin) feeding a standard sklearn classifier."""
     return Pipeline([
-        ("csp", CSP(n_components=N_COMPONENTS)),
+        ("wavelets", WaveletBandPower()),
         ("clf", CustomLDA()),
     ])
 

@@ -74,7 +74,7 @@ class CustomLDA(BaseEstimator, ClassifierMixin):
         # singular covariance matrix (protecting when Wavelet features are used, for example)
         if p > n_0 + n_1:
             shrinkage = 0.75  # Automatically dial up safety if features outnumber samples!
-            print(f"Shrinkage value -> {shrinkage}")
+            _log(f"Shrinkage value -> {shrinkage}")
         _log(f"Shrinkage value -> {shrinkage}")
         # -------------------------------- Shrinkage Regularization -----------------------
         # When we use wavelets, we take the messy, highly correlated, crash-prone real data
